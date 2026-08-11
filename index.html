@@ -13,13 +13,6 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    /* Card Flip Animation */
-    .perspective { perspective: 1000px; }
-    .transform-style-3d { transform-style: preserve-3d; }
-    .backface-hidden { backface-visibility: hidden; }
-    .rotate-y-180 { transform: rotateY(180deg); }
-  </style>
 </head>
 <body class="bg-slate-950 text-white font-sans antialiased selection:bg-amber-500 selection:text-slate-950">
   <div id="root"></div>
@@ -28,7 +21,7 @@
     const { useState, useEffect, useRef } = React;
 
     // ==========================================
-    // ⚙️ ตั้งค่า SUPABASE ของคุณตรงนี้
+    // ⚙️ ใส่ค่า SUPABASE ของคุณตรงนี้
     // ==========================================
     const SUPABASE_URL = "https://jztqmxrjkmunxncjdmyw.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6dHFteHJqa211bnhuY2pkbXl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NjQxODIsImV4cCI6MjEwMjA0MDE4Mn0.Jzp7Rd-z1UJ01usM-HkNFYfWpmjBclihId8OZLE1Aus";
@@ -54,7 +47,7 @@
       return AVATARS[Math.abs(hash) % AVATARS.length];
     };
 
-    // --- Component: หน้า Lobby ---
+    // --- หน้า Lobby ---
     function Lobby({ onJoinRoom }) {
       const [name, setName] = useState('');
       const [pin, setPin] = useState('');
@@ -76,7 +69,7 @@
         ]);
 
         if (roomError) {
-          setError('ไม่สามารถสร้างห้องได้ กรุณาตรวจสอบการตั้งค่า Supabase');
+          setError('ไม่สามารถสร้างห้องได้ กรุณาเช็คการตั้งค่า Supabase');
           setIsCreating(false);
           return;
         }
@@ -166,7 +159,7 @@
       );
     }
 
-    // --- Component: การ์ดของผู้เล่น ---
+    // --- Component: การ์ดผู้เล่น ---
     function PlayerHand({ player, onSaveClue, onPlayCard, onEditCard, isSpectator }) {
       const [clueInput, setClueInput] = useState(player?.clue || '');
 
@@ -174,15 +167,18 @@
         if (player?.clue) setClueInput(player.clue);
       }, [player?.clue]);
 
-      if (isSpectator || !player?.secret_number) {
+      // เป็นผู้ชมเฉพาะกรณีเข้าร่วมหลังเกมเริ่มแล้วจริงๆ เท่านั้น
+      if (isSpectator) {
         return (
           <div className="bg-slate-800/90 p-4 rounded-2xl border border-dashed border-amber-500/40 text-center mb-4">
             <div className="text-3xl mb-1">👁️</div>
             <h4 className="text-sm font-bold text-amber-400">คุณเป็นผู้ชมประจำรอบนี้</h4>
-            <p className="text-xs text-slate-400 mt-1">คุณเข้าร่วมระหว่างรอบ กำลังรับชมความสนุกอยู่ (จะได้เล่นรอบถัดไป)</p>
+            <p className="text-xs text-slate-400 mt-1">คุณเข้าร่วมระหว่างที่เกมกำลังดำเนินอยู่ (จะได้ร่วมเล่นในรอบถัดไป)</p>
           </div>
         );
       }
+
+      if (!player) return null;
 
       const handleSave = (e) => {
         e.preventDefault();
@@ -203,13 +199,13 @@
           </div>
 
           {/* การ์ดตัวเลขลับ */}
-          <div className="relative mx-auto w-28 h-36 bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 rounded-xl shadow-2xl border-2 border-amber-300/50 flex flex-col justify-between p-3 text-slate-950 font-black mb-4 select-none transform hover:scale-105 transition-transform">
+          <div className="relative mx-auto w-28 h-36 bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 rounded-xl shadow-2xl border-2 border-amber-300/50 flex flex-col justify-between p-3 text-slate-950 font-black mb-4 select-none">
             <span className="text-base text-left leading-none">{player.secret_number}</span>
             <span className="text-4xl text-center font-black my-auto">{player.secret_number}</span>
             <span className="text-base text-right leading-none">{player.secret_number}</span>
           </div>
 
-          {/* 2-Step Action: บันทึกคำใบ้ vs วางการ์ด */}
+          {/* 2-Step Action */}
           {!player.has_played ? (
             <div className="space-y-3 pt-2 border-t border-slate-700/80">
               <form onSubmit={handleSave} className="space-y-2">
@@ -217,7 +213,7 @@
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="เช่น ช้าง, มด, ปากกา..."
+                    placeholder="เช่น ช้าง, มด, ทองคำ..."
                     value={clueInput}
                     onChange={(e) => setClueInput(e.target.value)}
                     className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-xs text-white"
@@ -259,15 +255,11 @@
       );
     }
 
-    // --- Component: กระดานเปิดเฉลยการ์ดทีละใบ (Sequential Reveal) ---
-    function SharedPlayArea({ players, roomStatus, onRevealSingleCard, isHost }) {
+    // --- Component: กระดานส่วนกลาง ---
+    function SharedPlayArea({ players, roomStatus, onRevealSingleCard }) {
       const playedCards = players
         .filter((p) => p.has_played && p.secret_number !== null)
         .sort((a, b) => a.order_index - b.order_index);
-
-      // ค้นหาเลขที่เปิดเฉลยแล้ว เพื่อหาค่าสูงสุด
-      const revealedCards = playedCards.filter((p) => p.is_revealed);
-      const lastRevealed = revealedCards[revealedCards.length - 1];
 
       return (
         <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-xl">
@@ -303,7 +295,6 @@
                       <p className="text-sm font-extrabold text-amber-300 my-1">"{card.clue}"</p>
                     </div>
 
-                    {/* แสดงตัวเลขเมื่อเปิดการ์ดแล้ว / ปุ่มเปิดเฉลย */}
                     <div className="mt-3 pt-2 border-t border-slate-800 text-center">
                       {card.is_revealed ? (
                         <div className="text-2xl font-black text-amber-400 animate-pulse">
@@ -327,7 +318,7 @@
       );
     }
 
-    // --- Component: ระบบแชทประจำห้อง ---
+    // --- Component: แชทประจำห้อง ---
     function ChatBox({ roomId, playerName }) {
       const [messages, setMessages] = useState([]);
       const [input, setInput] = useState('');
@@ -411,7 +402,7 @@
       );
     }
 
-    // --- Main Game Room ---
+    // --- ห้องเกมหลัก ---
     function GameRoom({ session, onLeave }) {
       const { roomId, playerId, isHost, playerName } = session;
       const [room, setRoom] = useState(null);
@@ -437,65 +428,71 @@
         return () => { db.removeChannel(channel); };
       }, [roomId]);
 
-      // บันทึกคำใบ้
-      const handleSaveClue = async (clue) => {
-        await db.from('players').update({ clue }).eq('id', playerId);
-      };
-
-      // วางการ์ดลงกระดาน
-      const handlePlayCard = async () => {
-        await db.from('players').update({ has_played: true, is_revealed: false }).eq('id', playerId);
-      };
-
-      // ดึงการ์ดกลับมาแก้ไข
-      const handleEditCard = async () => {
-        await db.from('players').update({ has_played: false, is_revealed: false }).eq('id', playerId);
-      };
-
-      // เริ่มเกม / รอบใหม่
+      // เริ่มเกม: แจกตัวเลขให้ผู้เล่นทุกคนในห้องพร้อมกัน
       const handleStartGame = async () => {
         setGameAlert(null);
         const selectedTheme = customTheme.trim() || DEFAULT_THEMES[Math.floor(Math.random() * DEFAULT_THEMES.length)];
         const numbers = Array.from({ length: 100 }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
 
-        for (let i = 0; i < players.length; i++) {
-          await db.from('players').update({
+        // ดึงรายชื่อผู้เล่นล่าสุดทั้งหมด
+        const { data: latestPlayers } = await db.from('players').select('*').eq('room_id', roomId);
+        if (!latestPlayers || latestPlayers.length === 0) return;
+
+        // บันทึกแจกตัวเลขให้ทุกคนในครั้งเดียว
+        const updatePromises = latestPlayers.map((p, i) =>
+          db.from('players').update({
             secret_number: numbers[i],
             clue: '',
             has_played: false,
             is_revealed: false,
             order_index: i
-          }).eq('id', players[i].id);
-        }
+          }).eq('id', p.id)
+        );
 
+        await Promise.all(updatePromises);
         await db.from('rooms').update({ status: 'playing', theme: selectedTheme }).eq('id', roomId);
+        fetchData();
       };
 
-      // รีเซ็ตห้อง
       const handleResetRoom = async () => {
         if (!confirm('คุณต้องการรีเซ็ตห้องกลับหน้า Lobby ใช่หรือไม่?')) return;
         setGameAlert(null);
         await db.from('rooms').update({ status: 'lobby', theme: '' }).eq('id', roomId);
-        for (const p of players) {
-          await db.from('players').update({
-            secret_number: null,
-            clue: '',
-            has_played: false,
-            is_revealed: false,
-            order_index: 0
-          }).eq('id', p.id);
+
+        const { data: latestPlayers } = await db.from('players').select('*').eq('room_id', roomId);
+        if (latestPlayers) {
+          const resetPromises = latestPlayers.map((p) =>
+            db.from('players').update({
+              secret_number: null,
+              clue: '',
+              has_played: false,
+              is_revealed: false,
+              order_index: 0
+            }).eq('id', p.id)
+          );
+          await Promise.all(resetPromises);
         }
+        fetchData();
       };
 
-      // เปิดเฉลยการ์ดทีละใบสุดลุ้น!
+      const handleSaveClue = async (clue) => {
+        await db.from('players').update({ clue }).eq('id', playerId);
+      };
+
+      const handlePlayCard = async () => {
+        await db.from('players').update({ has_played: true, is_revealed: false }).eq('id', playerId);
+      };
+
+      const handleEditCard = async () => {
+        await db.from('players').update({ has_played: false, is_revealed: false }).eq('id', playerId);
+      };
+
       const handleRevealSingleCard = async (targetCard) => {
         const revealedList = players.filter((p) => p.is_revealed).sort((a, b) => a.secret_number - b.secret_number);
         const lastMaxNumber = revealedList.length > 0 ? Math.max(...revealedList.map((p) => p.secret_number)) : 0;
 
-        // อัปเดตเปิดการ์ด
         await db.from('players').update({ is_revealed: true }).eq('id', targetCard.id);
 
-        // ตรวจสอบความถูกต้อง
         if (targetCard.secret_number < lastMaxNumber) {
           setGameAlert({
             type: 'error',
@@ -514,6 +511,8 @@
       const currentPlayer = players.find((p) => p.id === playerId);
       const activePlayers = players.filter((p) => p.secret_number !== null);
       const playedCards = players.filter((p) => p.has_played && p.secret_number !== null);
+
+      // เป็นผู้ชมเฉพาะกรณีเพิ่งเข้าห้องมาหลังจากเกมเริ่มไปแล้วเท่านั้น
       const isSpectator = room?.status !== 'lobby' && (!currentPlayer || currentPlayer.secret_number === null);
 
       if (!room) return <div className="p-6 text-center text-white text-sm">กำลังเชื่อมต่อห้อง...</div>;
@@ -614,7 +613,6 @@
                 players={players}
                 roomStatus={room.status}
                 onRevealSingleCard={handleRevealSingleCard}
-                isHost={isHost}
               />
             </div>
           )}
