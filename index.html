@@ -13,15 +13,22 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* Card Flip Animation */
+    .perspective { perspective: 1000px; }
+    .transform-style-3d { transform-style: preserve-3d; }
+    .backface-hidden { backface-visibility: hidden; }
+    .rotate-y-180 { transform: rotateY(180deg); }
+  </style>
 </head>
 <body class="bg-slate-950 text-white font-sans antialiased selection:bg-amber-500 selection:text-slate-950">
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     // ==========================================
-    // ⚙️ ใส่ค่า SUPABASE ของคุณตรงนี้
+    // ⚙️ ตั้งค่า SUPABASE ของคุณตรงนี้
     // ==========================================
     const SUPABASE_URL = "https://jztqmxrjkmunxncjdmyw.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6dHFteHJqa211bnhuY2pkbXl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NjQxODIsImV4cCI6MjEwMjA0MDE4Mn0.Jzp7Rd-z1UJ01usM-HkNFYfWpmjBclihId8OZLE1Aus";
@@ -29,6 +36,7 @@
     const { createClient } = window.supabase;
     const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    const AVATARS = ['🦊', '🐯', '🦁', '🐼', '🐻', '🐸', '🐙', '🦄', '🤖', '👽', '🐶', '🐱'];
     const DEFAULT_THEMES = [
       "ขนาดของสัตว์ (เล็กไปใหญ่)",
       "ระดับความน่ากลัวของผี/สิ่งสถิต",
@@ -40,7 +48,13 @@
       "ความน่ารักของสัตว์เลี้ยง"
     ];
 
-    // --- หน้า Lobby (สร้าง/เข้าห้อง) ---
+    const getAvatar = (name) => {
+      let hash = 0;
+      for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i);
+      return AVATARS[Math.abs(hash) % AVATARS.length];
+    };
+
+    // --- Component: หน้า Lobby ---
     function Lobby({ onJoinRoom }) {
       const [name, setName] = useState('');
       const [pin, setPin] = useState('');
@@ -79,15 +93,8 @@
         if (pin.length !== 4) return setError('กรุณากรอก PIN 4 หลัก');
         setError('');
 
-        const { data: room, error: roomError } = await db
-          .from('rooms')
-          .select('*')
-          .eq('id', pin)
-          .single();
-
-        if (roomError || !room) {
-          return setError('ไม่พบห้องหมายเลขนี้');
-        }
+        const { data: room, error: roomError } = await db.from('rooms').select('*').eq('id', pin).single();
+        if (roomError || !room) return setError('ไม่พบห้องหมายเลขนี้');
 
         const playerId = crypto.randomUUID();
         await db.from('players').insert([
@@ -99,29 +106,33 @@
 
       return (
         <div className="flex flex-col items-center justify-center min-h-screen px-4 bg-slate-900 text-white">
-          <div className="w-full max-w-sm p-6 bg-slate-800 rounded-2xl shadow-xl border border-slate-700 text-center">
-            <h1 className="text-4xl font-extrabold text-amber-400 mb-2 tracking-wider">ITO イト</h1>
+          <div className="w-full max-w-sm p-6 bg-slate-800 rounded-2xl shadow-2xl border border-slate-700/80 text-center">
+            <div className="text-5xl mb-2 animate-bounce">🃏</div>
+            <h1 className="text-4xl font-extrabold text-amber-400 mb-1 tracking-wider">ITO イト</h1>
             <p className="text-xs text-slate-400 mb-6">เกมปาร์ตี้จัดลำดับตัวเลขลับประจำกลุ่ม (1-100)</p>
 
-            {error && <div className="p-3 mb-4 text-xs bg-red-500/20 text-red-300 border border-red-500/50 rounded-lg">{error}</div>}
+            {error && <div className="p-3 mb-4 text-xs bg-red-500/20 text-red-300 border border-red-500/50 rounded-xl">{error}</div>}
 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-400 text-left mb-1">ชื่อผู้เล่น</label>
-                <input
-                  type="text"
-                  placeholder="ใส่ชื่อของคุณ"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white text-sm"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-3 text-lg">{name ? getAvatar(name) : '👤'}</span>
+                  <input
+                    type="text"
+                    placeholder="ใส่ชื่อของคุณ"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white text-sm"
+                  />
+                </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-700">
+              <div className="pt-2 border-t border-slate-700/80">
                 <button
                   onClick={handleCreateRoom}
                   disabled={isCreating}
-                  className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 active:scale-95 font-bold rounded-xl text-slate-950 transition-all shadow-lg shadow-amber-500/20 text-sm"
+                  className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 font-extrabold rounded-xl text-slate-950 transition-all shadow-lg shadow-amber-500/20 active:scale-95 text-sm"
                 >
                   + สร้างห้องใหม่
                 </button>
@@ -140,11 +151,11 @@
                   placeholder="PIN 4 หลัก"
                   value={pin}
                   onChange={(e) => setPin(e.target.value.slice(0, 4))}
-                  className="w-1/2 text-center tracking-widest text-lg font-mono px-3 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+                  className="w-1/2 text-center tracking-widest text-lg font-mono px-3 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white font-bold"
                 />
                 <button
                   onClick={handleJoinRoom}
-                  className="w-1/2 py-3 bg-slate-700 hover:bg-slate-600 active:scale-95 font-semibold rounded-xl text-white text-sm transition-all"
+                  className="w-1/2 py-3 bg-slate-700 hover:bg-slate-600 font-bold rounded-xl text-white text-sm active:scale-95 transition-all"
                 >
                   เข้าห้อง
                 </button>
@@ -155,78 +166,90 @@
       );
     }
 
-    // --- การ์ดของผู้เล่น ---
-    function PlayerHand({ player, onPlayClue, onEditClue, isSpectator }) {
+    // --- Component: การ์ดของผู้เล่น ---
+    function PlayerHand({ player, onSaveClue, onPlayCard, onEditCard, isSpectator }) {
       const [clueInput, setClueInput] = useState(player?.clue || '');
 
       useEffect(() => {
         if (player?.clue) setClueInput(player.clue);
       }, [player?.clue]);
 
-      // หากเข้ามาระหว่างรอบ ให้เป็น Spectator
       if (isSpectator || !player?.secret_number) {
         return (
           <div className="bg-slate-800/90 p-4 rounded-2xl border border-dashed border-amber-500/40 text-center mb-4">
             <div className="text-3xl mb-1">👁️</div>
             <h4 className="text-sm font-bold text-amber-400">คุณเป็นผู้ชมประจำรอบนี้</h4>
-            <p className="text-xs text-slate-400 mt-1">คุณเข้าร่วมระหว่างที่เกมกำลังดำเนินอยู่ (จะได้ร่วมเล่นในรอบถัดไป)</p>
+            <p className="text-xs text-slate-400 mt-1">คุณเข้าร่วมระหว่างรอบ กำลังรับชมความสนุกอยู่ (จะได้เล่นรอบถัดไป)</p>
           </div>
         );
       }
 
-      const handleSubmit = (e) => {
+      const handleSave = (e) => {
         e.preventDefault();
         if (!clueInput.trim()) return;
-        onPlayClue(clueInput.trim());
+        onSaveClue(clueInput.trim());
       };
 
       return (
-        <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg mb-4">
+        <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-xl mb-4">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-xs text-slate-400 font-semibold">การ์ดลับของคุณ</span>
-            <span className="text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
-              ห้ามพูดตัวเลขตรงๆ!
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{getAvatar(player.name)}</span>
+              <span className="text-xs text-slate-300 font-bold">{player.name} (คุณ)</span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">
+              🔒 ตัวเลขลับของคุณ
             </span>
           </div>
 
-          {/* แสดงใบการ์ดตัวเลขลับ */}
-          <div className="relative mx-auto w-28 h-36 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl shadow-xl flex flex-col justify-between p-3 text-slate-950 font-black mb-4 select-none">
+          {/* การ์ดตัวเลขลับ */}
+          <div className="relative mx-auto w-28 h-36 bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 rounded-xl shadow-2xl border-2 border-amber-300/50 flex flex-col justify-between p-3 text-slate-950 font-black mb-4 select-none transform hover:scale-105 transition-transform">
             <span className="text-base text-left leading-none">{player.secret_number}</span>
-            <span className="text-4xl text-center font-extrabold my-auto">{player.secret_number}</span>
+            <span className="text-4xl text-center font-black my-auto">{player.secret_number}</span>
             <span className="text-base text-right leading-none">{player.secret_number}</span>
           </div>
 
-          {/* Form พิมพ์คำใบ้ */}
+          {/* 2-Step Action: บันทึกคำใบ้ vs วางการ์ด */}
           {!player.has_played ? (
-            <form onSubmit={handleSubmit} className="space-y-3 pt-1 border-t border-slate-700/60">
+            <div className="space-y-3 pt-2 border-t border-slate-700/80">
+              <form onSubmit={handleSave} className="space-y-2">
+                <label className="block text-xs text-slate-400 text-left font-semibold">1. พิมพ์คำใบ้ของคุณ:</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="เช่น ช้าง, มด, ปากกา..."
+                    value={clueInput}
+                    onChange={(e) => setClueInput(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-xs text-white"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-xs font-bold rounded-xl text-amber-300 active:scale-95 transition-all"
+                  >
+                    💾 บันทึก
+                  </button>
+                </div>
+              </form>
+
               <div>
-                <label className="block text-xs text-slate-400 text-left mb-1 font-medium">1. พิมพ์คำใบ้ตาม Theme:</label>
-                <input
-                  type="text"
-                  placeholder="เช่น ช้าง, มด, ทองคำ..."
-                  value={clueInput}
-                  onChange={(e) => setClueInput(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-sm text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 text-left mb-1 font-medium">2. ส่งการ์ดลงกระดาน:</label>
+                <label className="block text-xs text-slate-400 text-left font-semibold mb-1">2. ยืนยันการวางการ์ดลงกระดาน:</label>
                 <button
-                  type="submit"
-                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 font-bold rounded-xl text-slate-950 active:scale-95 transition-all text-sm shadow-md"
+                  onClick={onPlayCard}
+                  disabled={!player.clue}
+                  className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 disabled:opacity-30 disabled:pointer-events-none hover:from-emerald-400 hover:to-emerald-500 font-black rounded-xl text-slate-950 text-xs active:scale-95 transition-all shadow-md shadow-emerald-500/20"
                 >
-                  🃏 วางการ์ดคำใบ้ลงกระดาน
+                  🃏 วางการ์ดคำใบ้ลงกระดานกลาง
                 </button>
               </div>
-            </form>
+            </div>
           ) : (
-            <div className="space-y-2 pt-1 border-t border-slate-700/60">
+            <div className="space-y-2 pt-2 border-t border-slate-700/80">
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-semibold text-center">
-                ✓ วางการ์ดแล้ว: <span className="text-sm font-bold text-amber-300">"{player.clue}"</span>
+                ✓ วางการ์ดลงกระดานแล้ว: <span className="text-sm font-bold text-amber-300">"{player.clue}"</span>
               </div>
               <button
-                onClick={onEditClue}
-                className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-300 rounded-xl active:scale-95 transition-all"
+                onClick={onEditCard}
+                className="w-full py-1.5 bg-slate-700/80 hover:bg-slate-700 text-[11px] font-medium text-slate-300 rounded-lg active:scale-95 transition-all"
               >
                 ✏️ แก้ไขคำใบ้ / ดึงการ์ดกลับ
               </button>
@@ -236,126 +259,165 @@
       );
     }
 
-    // --- กระดานส่วนกลาง ---
-    function SharedPlayArea({ players, roomStatus, onMoveCard }) {
+    // --- Component: กระดานเปิดเฉลยการ์ดทีละใบ (Sequential Reveal) ---
+    function SharedPlayArea({ players, roomStatus, onRevealSingleCard, isHost }) {
       const playedCards = players
         .filter((p) => p.has_played && p.secret_number !== null)
         .sort((a, b) => a.order_index - b.order_index);
 
+      // ค้นหาเลขที่เปิดเฉลยแล้ว เพื่อหาค่าสูงสุด
+      const revealedCards = playedCards.filter((p) => p.is_revealed);
+      const lastRevealed = revealedCards[revealedCards.length - 1];
+
       return (
-        <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg">
+        <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-xl">
           <div className="flex justify-between items-center mb-3">
-            <h3 className="text-sm font-bold text-slate-300">กระดานการ์ดส่วนกลาง</h3>
-            <span className="text-xs text-slate-400">น้อย ➔ มาก</span>
+            <h3 className="text-sm font-bold text-slate-200">กระดานการ์ดส่วนกลาง</h3>
+            <span className="text-[11px] text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+              🔥 เปิดทีละใบเพื่อลุ้น!
+            </span>
           </div>
 
           {playedCards.length === 0 ? (
             <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-slate-700 rounded-xl">
-              ยังไม่มีใครลงการ์ดคำใบ้
+              ยังไม่มีใครวางการ์ดคำใบ้ลงกระดาน
             </div>
           ) : (
-            <div className="space-y-2">
-              {playedCards.map((card, idx) => (
-                <div key={card.id} className="flex items-center justify-between p-3 bg-slate-900 border border-slate-700 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono font-bold text-slate-500 w-4">{idx + 1}.</span>
+            <div className="grid grid-cols-2 gap-3">
+              {playedCards.map((card) => {
+                const avatar = getAvatar(card.name);
+                return (
+                  <div
+                    key={card.id}
+                    className={`p-3 rounded-xl border flex flex-col justify-between transition-all duration-300 ${
+                      card.is_revealed
+                        ? 'bg-gradient-to-b from-amber-500/20 to-slate-900 border-amber-500/60 shadow-lg shadow-amber-500/10'
+                        : 'bg-slate-900 border-slate-700 hover:border-slate-500'
+                    }`}
+                  >
                     <div>
-                      <p className="text-sm font-bold text-amber-300">"{card.clue}"</p>
-                      <p className="text-xs text-slate-400">โดย {card.name}</p>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-base">{avatar}</span>
+                        <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">{card.name}</span>
+                      </div>
+                      <p className="text-sm font-extrabold text-amber-300 my-1">"{card.clue}"</p>
+                    </div>
+
+                    {/* แสดงตัวเลขเมื่อเปิดการ์ดแล้ว / ปุ่มเปิดเฉลย */}
+                    <div className="mt-3 pt-2 border-t border-slate-800 text-center">
+                      {card.is_revealed ? (
+                        <div className="text-2xl font-black text-amber-400 animate-pulse">
+                          {card.secret_number}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => onRevealSingleCard(card)}
+                          className="w-full py-1.5 bg-amber-500 hover:bg-amber-400 active:scale-95 font-bold rounded-lg text-slate-950 text-xs shadow-md transition-all"
+                        >
+                          🔓 คลิกเปิดเฉลยใบนี้
+                        </button>
+                      )}
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    {roomStatus === 'revealed' && (
-                      <span className="px-2.5 py-1 bg-amber-500 text-slate-950 font-black rounded-lg text-sm">
-                        {card.secret_number}
-                      </span>
-                    )}
-
-                    {roomStatus === 'playing' && (
-                      <div className="flex flex-col gap-1">
-                        <button
-                          onClick={() => onMoveCard(idx, idx - 1)}
-                          disabled={idx === 0}
-                          className="p-1 bg-slate-800 disabled:opacity-20 hover:bg-slate-700 rounded text-xs px-2"
-                        >
-                          ▲
-                        </button>
-                        <button
-                          onClick={() => onMoveCard(idx, idx + 1)}
-                          disabled={idx === playedCards.length - 1}
-                          className="p-1 bg-slate-800 disabled:opacity-20 hover:bg-slate-700 rounded text-xs px-2"
-                        >
-                          ▼
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       );
     }
 
-    // --- หน้าต่างเปิดเฉลยผล ---
-    function ResultModal({ playedCards, isHost, onNextRound }) {
-      let isWin = true;
-      for (let i = 0; i < playedCards.length - 1; i++) {
-        if (playedCards[i].secret_number > playedCards[i + 1].secret_number) {
-          isWin = false;
-          break;
-        }
-      }
+    // --- Component: ระบบแชทประจำห้อง ---
+    function ChatBox({ roomId, playerName }) {
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState('');
+      const [isOpen, setIsOpen] = useState(false);
+      const chatEndRef = useRef(null);
+
+      const fetchMessages = async () => {
+        const { data } = await db.from('messages').select('*').eq('room_id', roomId).order('created_at', { ascending: true });
+        if (data) setMessages(data);
+      };
+
+      useEffect(() => {
+        fetchMessages();
+        const channel = db
+          .channel(`messages:${roomId}`)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (payload) => {
+            setMessages((prev) => [...prev, payload.new]);
+          })
+          .subscribe();
+
+        return () => { db.removeChannel(channel); };
+      }, [roomId]);
+
+      useEffect(() => {
+        if (isOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [messages, isOpen]);
+
+      const handleSend = async (e) => {
+        e.preventDefault();
+        if (!input.trim()) return;
+        const msg = input.trim();
+        setInput('');
+        await db.from('messages').insert([{ room_id: roomId, player_name: playerName, text: msg }]);
+      };
 
       return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-sm bg-slate-800 border border-slate-700 rounded-2xl p-6 text-center shadow-2xl">
-            {isWin ? (
-              <div>
-                <div className="text-5xl mb-2">🎉</div>
-                <h2 className="text-2xl font-black text-emerald-400 mb-1">ชนะแล้ว! (WIN)</h2>
-                <p className="text-xs text-slate-300 mb-4">ทุกคนร่วมมือเรียงลำดับตัวเลขได้ถูกต้องสมบูรณ์!</p>
-              </div>
-            ) : (
-              <div>
-                <div className="text-5xl mb-2">💥</div>
-                <h2 className="text-2xl font-black text-rose-500 mb-1">พ่ายแพ้! (LOSE)</h2>
-                <p className="text-xs text-slate-300 mb-4">มีตัวเลขที่ไม่ตรงตามลำดับ ลองใหม่อีกรอบนะ!</p>
-              </div>
-            )}
+        <div className="mt-4">
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700/80 border border-slate-700 rounded-xl flex items-center justify-between px-4 text-xs font-bold text-slate-300 transition-all"
+          >
+            <span className="flex items-center gap-2">
+              💬 แชทพูดคุยปรึกษากัน <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full text-[10px]">{messages.length}</span>
+            </span>
+            <span>{isOpen ? '▲ ซ่อน' : '▼ เปิดแชท'}</span>
+          </button>
 
-            <div className="my-4 max-h-48 overflow-y-auto space-y-1 text-left bg-slate-900 p-3 rounded-xl">
-              {playedCards.map((c, i) => (
-                <div key={c.id} className="flex justify-between text-xs py-1 border-b border-slate-800 last:border-none">
-                  <span className="text-slate-300">{i + 1}. "{c.clue}" ({c.name})</span>
-                  <span className="font-bold text-amber-400">{c.secret_number}</span>
-                </div>
-              ))}
+          {isOpen && (
+            <div className="mt-2 bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-3">
+              <div className="h-40 overflow-y-auto space-y-2 pr-1 text-xs">
+                {messages.length === 0 ? (
+                  <p className="text-center text-slate-500 my-10">เริ่มพิมพ์พูดคุยวิเคราะห์คำใบ้ได้ตรงนี้!</p>
+                ) : (
+                  messages.map((m) => (
+                    <div key={m.id} className={`flex flex-col ${m.player_name === playerName ? 'items-end' : 'items-start'}`}>
+                      <span className="text-[10px] text-slate-500 mb-0.5">{m.player_name}</span>
+                      <div className={`px-3 py-1.5 rounded-xl max-w-[80%] ${m.player_name === playerName ? 'bg-amber-500 text-slate-950 font-medium' : 'bg-slate-800 text-slate-200 border border-slate-700'}`}>
+                        {m.text}
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              <form onSubmit={handleSend} className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="พิมพ์ข้อความ..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
+                />
+                <button type="submit" className="px-4 py-2 bg-amber-500 hover:bg-amber-400 font-bold text-slate-950 text-xs rounded-xl active:scale-95">
+                  ส่ง
+                </button>
+              </form>
             </div>
-
-            {isHost ? (
-              <button
-                onClick={onNextRound}
-                className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-sm"
-              >
-                🔄 เริ่มรอบใหม่
-              </button>
-            ) : (
-              <p className="text-xs text-slate-500">รอ Host กดเริ่มรอบใหม่...</p>
-            )}
-          </div>
+          )}
         </div>
       );
     }
 
-    // --- ห้องเกมหลัก ---
+    // --- Main Game Room ---
     function GameRoom({ session, onLeave }) {
-      const { roomId, playerId, isHost } = session;
+      const { roomId, playerId, isHost, playerName } = session;
       const [room, setRoom] = useState(null);
       const [players, setPlayers] = useState([]);
       const [customTheme, setCustomTheme] = useState('');
+      const [gameAlert, setGameAlert] = useState(null);
 
       const fetchData = async () => {
         const { data: roomData } = await db.from('rooms').select('*').eq('id', roomId).single();
@@ -368,14 +430,31 @@
         fetchData();
         const channel = db
           .channel(`room:${roomId}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, () => fetchData())           .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, () => fetchData())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, () => fetchData())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, () => fetchData())
           .subscribe();
 
         return () => { db.removeChannel(channel); };
       }, [roomId]);
 
-      // ปุ่มเริ่มเกม / เริ่มรอบใหม่
+      // บันทึกคำใบ้
+      const handleSaveClue = async (clue) => {
+        await db.from('players').update({ clue }).eq('id', playerId);
+      };
+
+      // วางการ์ดลงกระดาน
+      const handlePlayCard = async () => {
+        await db.from('players').update({ has_played: true, is_revealed: false }).eq('id', playerId);
+      };
+
+      // ดึงการ์ดกลับมาแก้ไข
+      const handleEditCard = async () => {
+        await db.from('players').update({ has_played: false, is_revealed: false }).eq('id', playerId);
+      };
+
+      // เริ่มเกม / รอบใหม่
       const handleStartGame = async () => {
+        setGameAlert(null);
         const selectedTheme = customTheme.trim() || DEFAULT_THEMES[Math.floor(Math.random() * DEFAULT_THEMES.length)];
         const numbers = Array.from({ length: 100 }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
 
@@ -384,6 +463,7 @@
             secret_number: numbers[i],
             clue: '',
             has_played: false,
+            is_revealed: false,
             order_index: i
           }).eq('id', players[i].id);
         }
@@ -391,49 +471,52 @@
         await db.from('rooms').update({ status: 'playing', theme: selectedTheme }).eq('id', roomId);
       };
 
-      // ปุ่ม Reset ห้องกลับ Lobby
+      // รีเซ็ตห้อง
       const handleResetRoom = async () => {
-        if (!confirm('คุณต้องการรีเซ็ตห้องกลับไปหน้า Lobby ใช่หรือไม่?')) return;
+        if (!confirm('คุณต้องการรีเซ็ตห้องกลับหน้า Lobby ใช่หรือไม่?')) return;
+        setGameAlert(null);
         await db.from('rooms').update({ status: 'lobby', theme: '' }).eq('id', roomId);
         for (const p of players) {
           await db.from('players').update({
             secret_number: null,
             clue: '',
             has_played: false,
+            is_revealed: false,
             order_index: 0
           }).eq('id', p.id);
         }
       };
 
-      const handlePlayClue = async (clue) => {
-        await db.from('players').update({ clue, has_played: true }).eq('id', playerId);
-      };
+      // เปิดเฉลยการ์ดทีละใบสุดลุ้น!
+      const handleRevealSingleCard = async (targetCard) => {
+        const revealedList = players.filter((p) => p.is_revealed).sort((a, b) => a.secret_number - b.secret_number);
+        const lastMaxNumber = revealedList.length > 0 ? Math.max(...revealedList.map((p) => p.secret_number)) : 0;
 
-      const handleEditClue = async () => {
-        await db.from('players').update({ has_played: false }).eq('id', playerId);
-      };
+        // อัปเดตเปิดการ์ด
+        await db.from('players').update({ is_revealed: true }).eq('id', targetCard.id);
 
-      const handleMoveCard = async (fromIdx, toIdx) => {
-        const played = players.filter((p) => p.has_played && p.secret_number !== null).sort((a, b) => a.order_index - b.order_index);
-        const updated = [...played];
-        const [moved] = updated.splice(fromIdx, 1);
-        updated.splice(toIdx, 0, moved);
-
-        for (let i = 0; i < updated.length; i++) {
-          await db.from('players').update({ order_index: i }).eq('id', updated[i].id);
+        // ตรวจสอบความถูกต้อง
+        if (targetCard.secret_number < lastMaxNumber) {
+          setGameAlert({
+            type: 'error',
+            title: '💥 พลาดแล้ว! เรียงผิดลำดับ!',
+            message: `การ์ดของ ${targetCard.name} (${targetCard.secret_number}) น้อยกว่าการ์ดก่อนหน้า (${lastMaxNumber})`
+          });
+        } else {
+          setGameAlert({
+            type: 'success',
+            title: '🎉 ถูกต้อง! ลุ้นกันต่อ!',
+            message: `การ์ดของ ${targetCard.name} คือเลข (${targetCard.secret_number}) เรียงถูกต้อง!`
+          });
         }
-      };
-
-      const handleReveal = async () => {
-        await db.from('rooms').update({ status: 'revealed' }).eq('id', roomId);
       };
 
       const currentPlayer = players.find((p) => p.id === playerId);
       const activePlayers = players.filter((p) => p.secret_number !== null);
-      const playedCards = players.filter((p) => p.has_played && p.secret_number !== null).sort((a, b) => a.order_index - b.order_index);
+      const playedCards = players.filter((p) => p.has_played && p.secret_number !== null);
       const isSpectator = room?.status !== 'lobby' && (!currentPlayer || currentPlayer.secret_number === null);
 
-      if (!room) return <div className="p-6 text-center text-white text-sm">กำลังเชื่อมต่อห้องเกม...</div>;
+      if (!room) return <div className="p-6 text-center text-white text-sm">กำลังเชื่อมต่อห้อง...</div>;
 
       return (
         <div className="min-h-screen bg-slate-900 text-white p-4 max-w-md mx-auto">
@@ -447,34 +530,45 @@
               {isHost && (
                 <button
                   onClick={handleResetRoom}
-                  className="text-xs px-2.5 py-1.5 bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg hover:bg-rose-500/30"
+                  className="text-xs px-2.5 py-1.5 bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg hover:bg-rose-500/30 font-semibold"
                 >
-                  🔄 Reset ห้อง
+                  🔄 Reset
                 </button>
               )}
-              <button onClick={onLeave} className="text-xs px-2.5 py-1.5 bg-slate-800 text-slate-400 rounded-lg hover:text-white">
-                ออกจากห้อง
+              <button onClick={onLeave} className="text-xs px-2.5 py-1.5 bg-slate-800 text-slate-400 rounded-lg hover:text-white font-semibold">
+                ออก
               </button>
             </div>
           </div>
 
-          {/* Bar แสดงจำนวนผู้เล่นในห้อง */}
-          <div className="flex justify-between items-center px-3 py-2 bg-slate-800/80 rounded-xl mb-4 text-xs text-slate-300 border border-slate-700/60">
-            <span>👥 ผู้เล่นในห้อง: <strong className="text-amber-400">{players.length}</strong> คน</span>
+          {/* Player Count Bar */}
+          <div className="flex justify-between items-center px-3 py-2 bg-slate-800/80 rounded-xl mb-3 text-xs text-slate-300 border border-slate-700/60">
+            <span>👥 ผู้เล่น: <strong className="text-amber-400">{players.length}</strong> คน</span>
             {room.status !== 'lobby' && (
-              <span>🃏 ลงการ์ดแล้ว: <strong className="text-emerald-400">{playedCards.length}/{activePlayers.length}</strong> คน</span>
+              <span>🃏 วางการ์ดแล้ว: <strong className="text-emerald-400">{playedCards.length}/{activePlayers.length}</strong> คน</span>
             )}
           </div>
+
+          {/* Game Alert Message */}
+          {gameAlert && (
+            <div className={`p-3 mb-3 text-xs rounded-xl border text-center animate-bounce ${
+              gameAlert.type === 'error' ? 'bg-rose-500/20 border-rose-500/50 text-rose-300' : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+            }`}>
+              <div className="font-bold text-sm mb-0.5">{gameAlert.title}</div>
+              <div>{gameAlert.message}</div>
+            </div>
+          )}
 
           {/* Lobby State */}
           {room.status === 'lobby' && (
             <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 text-center space-y-4">
-              <h3 className="text-sm font-bold">รายชื่อผู้เล่นในห้อง ({players.length} คน)</h3>
-              <div className="flex flex-wrap gap-2 justify-center">
+              <h3 className="text-sm font-bold text-slate-200">รายชื่อผู้เล่นที่อยู่ในห้อง ({players.length} คน)</h3>
+              <div className="grid grid-cols-2 gap-2">
                 {players.map((p) => (
-                  <span key={p.id} className="px-3 py-1 bg-slate-900 text-xs rounded-full border border-slate-700">
-                    {p.name} {p.id === room.host_id && '👑'}
-                  </span>
+                  <div key={p.id} className="p-2.5 bg-slate-900 border border-slate-700 rounded-xl flex items-center gap-2 text-xs">
+                    <span className="text-lg">{getAvatar(p.name)}</span>
+                    <span className="font-bold text-slate-200 truncate">{p.name} {p.id === room.host_id && '👑'}</span>
+                  </div>
                 ))}
               </div>
 
@@ -489,7 +583,7 @@
                   />
                   <button
                     onClick={handleStartGame}
-                    className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-sm shadow-lg shadow-amber-500/20"
+                    className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
                   >
                     🚀 เริ่มเกม!
                   </button>
@@ -500,37 +594,33 @@
             </div>
           )}
 
-          {/* Playing & Revealed State */}
+          {/* Playing State */}
           {room.status !== 'lobby' && (
             <div>
-              <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl mb-4 text-center">
+              <div className="bg-gradient-to-r from-amber-500/20 to-amber-600/20 border border-amber-500/40 p-3 rounded-xl mb-3 text-center">
                 <span className="text-xs text-amber-300 font-semibold block">Theme ประจำรอบ</span>
                 <span className="text-base font-black text-amber-400">"{room.theme}"</span>
               </div>
 
               <PlayerHand
                 player={currentPlayer}
-                onPlayClue={handlePlayClue}
-                onEditClue={handleEditClue}
+                onSaveClue={handleSaveClue}
+                onPlayCard={handlePlayCard}
+                onEditCard={handleEditCard}
                 isSpectator={isSpectator}
               />
 
-              <SharedPlayArea players={players} roomStatus={room.status} onMoveCard={handleMoveCard} />
-
-              {room.status === 'playing' && isHost && playedCards.length === activePlayers.length && activePlayers.length > 0 && (
-                <button
-                  onClick={handleReveal}
-                  className="w-full mt-4 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-emerald-500/20"
-                >
-                  🔓 เปิดเฉลยตัวเลขทั้งหมด!
-                </button>
-              )}
+              <SharedPlayArea
+                players={players}
+                roomStatus={room.status}
+                onRevealSingleCard={handleRevealSingleCard}
+                isHost={isHost}
+              />
             </div>
           )}
 
-          {room.status === 'revealed' && (
-            <ResultModal playedCards={playedCards} isHost={isHost} onNextRound={handleStartGame} />
-          )}
+          {/* Live Chat Drawer */}
+          <ChatBox roomId={roomId} playerName={playerName} />
         </div>
       );
     }
