@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ITO Board Game Online イト</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel CDN -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-950 text-white font-sans antialiased selection:bg-amber-500 selection:text-slate-950">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ==========================================
+    // ⚙️ นำค่าจาก SUPABASE ของคุณมาวางตรงนี้
+    // ==========================================
+    const SUPABASE_URL = "https://jztqmxrjkmunxncjdmyw.supabase.co";       // เช่น "https://xxxxxx.supabase.co"
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6dHFteHJqa211bnhuY2pkbXl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NjQxODIsImV4cCI6MjEwMjA0MDE4Mn0.Jzp7Rd-z1UJ01usM-HkNFYfWpmjBclihId8OZLE1Aus"; // เช่น "eyJhbGciOi..."
+
+    const { createClient } = window.supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const DEFAULT_THEMES = [
+      "ขนาดของสัตว์ (เล็กไปใหญ่)",
+      "ระดับความน่ากลัวของผี/สิ่งสถิต",
+      "ความอยากได้เป็นของขวัญวันเกิด",
+      "ความสามารถในการเอาชีวิตรอดในเกาะร้าง",
+      "ระดับความอร่อยของเมนูอาหารไทย",
+      "ความซูเปอร์ฮีโร่ / พลังพิเศษที่อยากมี",
+      "ระดับความแพงของสินค้านี้",
+      "ความน่ารักของสัตว์เลี้ยง"
+    ];
+
+    // --- หน้า Lobby (สร้าง/เข้าห้อง) ---
+    function Lobby({ onJoinRoom }) {
+      const [name, setName] = useState('');
+      const [pin, setPin] = useState('');
+      const [isCreating, setIsCreating] = useState(false);
+      const [error, setError] = useState('');
+
+      const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString();
+
+      const handleCreateRoom = async () => {
+        if (!name.trim()) return setError('กรุณากรอกชื่อของคุณ');
+        setError('');
+        setIsCreating(true);
+
+        const roomPin = generatePin();
+        const playerId = crypto.randomUUID();
+
+        const { error: roomError } = await db.from('rooms').insert([
+          { id: roomPin, status: 'lobby', host_id: playerId }
+        ]);
+
+        if (roomError) {
+          setError('ไม่สามารถสร้างห้องได้ กรุณาเช็คตั้งค่า Supabase');
+          setIsCreating(false);
+          return;
+        }
+
+        await db.from('players').insert([
+          { id: playerId, room_id: roomPin, name: name.trim() }
+        ]);
+
+        onJoinRoom({ roomId: roomPin, playerId, isHost: true, playerName: name.trim() });
+      };
+
+      const handleJoinRoom = async () => {
+        if (!name.trim()) return setError('กรุณากรอกชื่อของคุณ');
+        if (pin.length !== 4) return setError('กรุณากรอก PIN 4 หลัก');
+        setError('');
+
+        const { data: room, error: roomError } = await db
+          .from('rooms')
+          .select('*')
+          .eq('id', pin)
+          .single();
+
+        if (roomError || !room) {
+          return setError('ไม่พบห้องหมายเลขนี้');
+        }
+
+        const playerId = crypto.randomUUID();
+        await db.from('players').insert([
+          { id: playerId, room_id: pin, name: name.trim() }
+        ]);
+
+        onJoinRoom({ roomId: pin, playerId, isHost: room.host_id === playerId, playerName: name.trim() });
+      };
+
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen px-4 bg-slate-900 text-white">
+          <div className="w-full max-w-sm p-6 bg-slate-800 rounded-2xl shadow-xl border border-slate-700 text-center">
+            <h1 className="text-4xl font-extrabold text-amber-400 mb-2 tracking-wider">ITO イト</h1>
+            <p className="text-xs text-slate-400 mb-6">เกมปาร์ตี้จัดลำดับตัวเลขลับประจำกลุ่ม (1-100)</p>
+
+            {error && <div className="p-3 mb-4 text-xs bg-red-500/20 text-red-300 border border-red-500/50 rounded-lg">{error}</div>}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 text-left mb-1">ชื่อผู้เล่น</label>
+                <input
+                  type="text"
+                  placeholder="ใส่ชื่อของคุณ"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white text-sm"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-slate-700">
+                <button
+                  onClick={handleCreateRoom}
+                  disabled={isCreating}
+                  className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 active:scale-95 font-bold rounded-xl text-slate-950 transition-all shadow-lg shadow-amber-500/20 text-sm"
+                >
+                  + สร้างห้องใหม่
+                </button>
+              </div>
+
+              <div className="flex items-center my-2 text-slate-500 text-xs uppercase font-bold">
+                <div className="flex-1 border-t border-slate-700"></div>
+                <span className="px-3">หรือ เข้าร่วมห้อง</span>
+                <div className="flex-1 border-t border-slate-700"></div>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  maxLength={4}
+                  placeholder="PIN 4 หลัก"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.slice(0, 4))}
+                  className="w-1/2 text-center tracking-widest text-lg font-mono px-3 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+                />
+                <button
+                  onClick={handleJoinRoom}
+                  className="w-1/2 py-3 bg-slate-700 hover:bg-slate-600 active:scale-95 font-semibold rounded-xl text-white text-sm transition-all"
+                >
+                  เข้าห้อง
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- การ์ดของผู้เล่น ---
+    function PlayerHand({ player, onPlayClue }) {
+      const [clueInput, setClueInput] = useState(player.clue || '');
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!clueInput.trim()) return;
+        onPlayClue(clueInput.trim());
+      };
+
+      return (
+        <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg text-center mb-4">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs text-slate-400 font-semibold">การ์ดลับของคุณ</span>
+            <span className="text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
+              ห้ามพูดตัวเลขตรงๆ!
+            </span>
+          </div>
+
+          <div className="relative mx-auto w-28 h-36 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl shadow-xl flex flex-col justify-between p-3 text-slate-950 font-black mb-4 select-none">
+            <span className="text-base text-left leading-none">{player.secret_number}</span>
+            <span className="text-4xl text-center font-extrabold my-auto">{player.secret_number}</span>
+            <span className="text-base text-right leading-none">{player.secret_number}</span>
+          </div>
+
+          {!player.has_played ? (
+            <form onSubmit={handleSubmit} className="space-y-2">
+              <input
+                type="text"
+                placeholder="พิมพ์คำใบ้ของคุณตาม Theme..."
+                value={clueInput}
+                onChange={(e) => setClueInput(e.target.value)}
+                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-sm text-white"
+              />
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 font-bold rounded-xl text-slate-950 active:scale-95 transition-all text-sm"
+              >
+                🃏 วางการ์ดคำใบ้ลงกระดาน
+              </button>
+            </form>
+          ) : (
+            <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-semibold">
+              ✓ วางการ์ดคำใบ้แล้ว: "{player.clue}"
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // --- กระดานส่วนกลาง ---
+    function SharedPlayArea({ players, roomStatus, onMoveCard }) {
+      const playedCards = players
+        .filter((p) => p.has_played)
+        .sort((a, b) => a.order_index - b.order_index);
+
+      return (
+        <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-bold text-slate-300">กระดานการ์ดส่วนกลาง</h3>
+            <span className="text-xs text-slate-400">น้อย ➔ มาก</span>
+          </div>
+
+          {playedCards.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-slate-700 rounded-xl">
+              ยังไม่มีใครลงการ์ดคำใบ้
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {playedCards.map((card, idx) => (
+                <div key={card.id} className="flex items-center justify-between p-3 bg-slate-900 border border-slate-700 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-bold text-slate-500 w-4">{idx + 1}.</span>
+                    <div>
+                      <p className="text-sm font-bold text-amber-300">"{card.clue}"</p>
+                      <p className="text-xs text-slate-400">โดย {card.name}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {roomStatus === 'revealed' && (
+                      <span className="px-2.5 py-1 bg-amber-500 text-slate-950 font-black rounded-lg text-sm">
+                        {card.secret_number}
+                      </span>
+                    )}
+
+                    {roomStatus === 'playing' && (
+                      <div className="flex flex-col gap-1">
+                        <button
+                          onClick={() => onMoveCard(idx, idx - 1)}
+                          disabled={idx === 0}
+                          className="p-1 bg-slate-800 disabled:opacity-20 hover:bg-slate-700 rounded text-xs px-2"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          onClick={() => onMoveCard(idx, idx + 1)}
+                          disabled={idx === playedCards.length - 1}
+                          className="p-1 bg-slate-800 disabled:opacity-20 hover:bg-slate-700 rounded text-xs px-2"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // --- หน้าต่างเปิดเฉลยผลการเล่น ---
+    function ResultModal({ playedCards, isHost, onNextRound }) {
+      let isWin = true;
+      for (let i = 0; i < playedCards.length - 1; i++) {
+        if (playedCards[i].secret_number > playedCards[i + 1].secret_number) {
+          isWin = false;
+          break;
+        }
+      }
+
+      return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-sm bg-slate-800 border border-slate-700 rounded-2xl p-6 text-center shadow-2xl">
+            {isWin ? (
+              <div>
+                <div className="text-5xl mb-2">🎉</div>
+                <h2 className="text-2xl font-black text-emerald-400 mb-1">ชนะแล้ว! (WIN)</h2>
+                <p className="text-xs text-slate-300 mb-4">ทุกคนร่วมมือเรียงลำดับตัวเลขได้ถูกต้องสมบูรณ์!</p>
+              </div>
+            ) : (
+              <div>
+                <div className="text-5xl mb-2">💥</div>
+                <h2 className="text-2xl font-black text-rose-500 mb-1">พ่ายแพ้! (LOSE)</h2>
+                <p className="text-xs text-slate-300 mb-4">มีตัวเลขที่ไม่ตรงตามลำดับ ลองใหม่อีกรอบนะ!</p>
+              </div>
+            )}
+
+            <div className="my-4 max-h-48 overflow-y-auto space-y-1 text-left bg-slate-900 p-3 rounded-xl">
+              {playedCards.map((c, i) => (
+                <div key={c.id} className="flex justify-between text-xs py-1 border-b border-slate-800 last:border-none">
+                  <span className="text-slate-300">{i + 1}. "{c.clue}" ({c.name})</span>
+                  <span className="font-bold text-amber-400">{c.secret_number}</span>
+                </div>
+              ))}
+            </div>
+
+            {isHost ? (
+              <button
+                onClick={onNextRound}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-sm"
+              >
+                🔄 เริ่มรอบใหม่
+              </button>
+            ) : (
+              <p className="text-xs text-slate-500">รอ Host กดเริ่มรอบใหม่...</p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // --- ห้องเกมหลัก ---
+    function GameRoom({ session, onLeave }) {
+      const { roomId, playerId, isHost } = session;
+      const [room, setRoom] = useState(null);
+      const [players, setPlayers] = useState([]);
+      const [customTheme, setCustomTheme] = useState('');
+
+      const fetchData = async () => {
+        const { data: roomData } = await db.from('rooms').select('*').eq('id', roomId).single();
+        const { data: playersData } = await db.from('players').select('*').eq('room_id', roomId);
+        if (roomData) setRoom(roomData);
+        if (playersData) setPlayers(playersData);
+      };
+
+      useEffect(() => {
+        fetchData();
+        const channel = db
+          .channel(`room:${roomId}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, () => fetchData())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, () => fetchData())
+          .subscribe();
+
+        return () => { db.removeChannel(channel); };
+      }, [roomId]);
+
+      const handleStartGame = async () => {
+        const selectedTheme = customTheme.trim() || DEFAULT_THEMES[Math.floor(Math.random() * DEFAULT_THEMES.length)];
+        const numbers = Array.from({ length: 100 }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+
+        for (let i = 0; i < players.length; i++) {
+          await db.from('players').update({
+            secret_number: numbers[i],
+            clue: '',
+            has_played: false,
+            order_index: i
+          }).eq('id', players[i].id);
+        }
+
+        await db.from('rooms').update({ status: 'playing', theme: selectedTheme }).eq('id', roomId);
+      };
+
+      const handlePlayClue = async (clue) => {
+        await db.from('players').update({ clue, has_played: true }).eq('id', playerId);
+      };
+
+      const handleMoveCard = async (fromIdx, toIdx) => {
+        const played = players.filter((p) => p.has_played).sort((a, b) => a.order_index - b.order_index);
+        const updated = [...played];
+        const [moved] = updated.splice(fromIdx, 1);
+        updated.splice(toIdx, 0, moved);
+
+        for (let i = 0; i < updated.length; i++) {
+          await db.from('players').update({ order_index: i }).eq('id', updated[i].id);
+        }
+      };
+
+      const handleReveal = async () => {
+        await db.from('rooms').update({ status: 'revealed' }).eq('id', roomId);
+      };
+
+      const currentPlayer = players.find((p) => p.id === playerId);
+      const playedCards = players.filter((p) => p.has_played).sort((a, b) => a.order_index - b.order_index);
+
+      if (!room) return <div className="p-6 text-center text-white text-sm">กำลังเชื่อมต่อระบบ Realtime...</div>;
+
+      return (
+        <div className="min-h-screen bg-slate-900 text-white p-4 max-w-md mx-auto">
+          <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-4">
+            <div>
+              <span className="text-xs text-slate-400">ห้อง PIN</span>
+              <h2 className="text-xl font-mono font-bold text-amber-400">{roomId}</h2>
+            </div>
+            <button onClick={onLeave} className="text-xs px-3 py-1.5 bg-slate-800 text-slate-400 rounded-lg hover:text-white">
+              ออกจากห้อง
+            </button>
+          </div>
+
+          {room.status === 'lobby' && (
+            <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 text-center space-y-4">
+              <h3 className="text-sm font-bold">ผู้เล่นที่เชื่อมต่ออยู่ ({players.length} คน)</h3>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {players.map((p) => (
+                  <span key={p.id} className="px-3 py-1 bg-slate-900 text-xs rounded-full border border-slate-700">
+                    {p.name} {p.id === room.host_id && '👑'}
+                  </span>
+                ))}
+              </div>
+
+              {isHost ? (
+                <div className="space-y-3 pt-2">
+                  <input
+                    type="text"
+                    placeholder="พิมพ์ Theme เอง (หรือปล่อยว่างเพื่อสุ่ม)"
+                    value={customTheme}
+                    onChange={(e) => setCustomTheme(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white"
+                  />
+                  <button
+                    onClick={handleStartGame}
+                    className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-sm"
+                  >
+                    🚀 เริ่มเกม!
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 animate-pulse">รอ Host กดเริ่มเกม...</p>
+              )}
+            </div>
+          )}
+
+          {room.status !== 'lobby' && (
+            <div>
+              <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl mb-4 text-center">
+                <span className="text-xs text-amber-300 font-semibold block">Theme ประจำรอบ</span>
+                <span className="text-base font-black text-amber-400">"{room.theme}"</span>
+              </div>
+
+              {currentPlayer && <PlayerHand player={currentPlayer} onPlayClue={handlePlayClue} />}
+              <SharedPlayArea players={players} roomStatus={room.status} onMoveCard={handleMoveCard} />
+
+              {room.status === 'playing' && isHost && playedCards.length === players.length && (
+                <button
+                  onClick={handleReveal}
+                  className="w-full mt-4 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-sm"
+                >
+                  🔓 เปิดเฉลยตัวเลขทั้งหมด!
+                </button>
+              )}
+            </div>
+          )}
+
+          {room.status === 'revealed' && (
+            <ResultModal playedCards={playedCards} isHost={isHost} onNextRound={handleStartGame} />
+          )}
+        </div>
+      );
+    }
+
+    function App() {
+      const [session, setSession] = useState(null);
+      return (
+        <div className="min-h-screen bg-slate-950 font-sans">
+          {!session ? (
+            <Lobby onJoinRoom={(data) => setSession(data)} />
+          ) : (
+            <GameRoom session={session} onLeave={() => setSession(null)} />
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
