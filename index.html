@@ -53,8 +53,18 @@
       const [pin, setPin] = useState('');
       const [isCreating, setIsCreating] = useState(false);
       const [error, setError] = useState('');
+      const [totalGames, setTotalGames] = useState(0);
 
       const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString();
+
+      // ดึงสถิติการเล่นทั้งหมด
+      useEffect(() => {
+        const fetchStats = async () => {
+          const { data } = await db.from('game_stats').select('*').eq('id', 1).single();
+          if (data) setTotalGames(data.total_games_played);
+        };
+        fetchStats();
+      }, []);
 
       const handleCreateRoom = async () => {
         if (!name.trim()) return setError('กรุณากรอกชื่อของคุณ');
@@ -153,6 +163,11 @@
                   เข้าห้อง
                 </button>
               </div>
+
+              {/* แสดงสถิติการเล่นสะสม */}
+              <div className="pt-3 text-[11px] text-slate-500 font-medium">
+                🎮 เล่นไปแล้วทั้งหมด: <strong className="text-amber-400/80">{totalGames}</strong> รอบ
+              </div>
             </div>
           </div>
         </div>
@@ -167,7 +182,6 @@
         if (player?.clue) setClueInput(player.clue);
       }, [player?.clue]);
 
-      // เป็นผู้ชมเฉพาะกรณีเข้าร่วมหลังเกมเริ่มแล้วจริงๆ เท่านั้น
       if (isSpectator) {
         return (
           <div className="bg-slate-800/90 p-4 rounded-2xl border border-dashed border-amber-500/40 text-center mb-4">
@@ -198,14 +212,12 @@
             </span>
           </div>
 
-          {/* การ์ดตัวเลขลับ */}
-          <div className="relative mx-auto w-28 h-36 bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 rounded-xl shadow-2xl border-2 border-amber-300/50 flex flex-col justify-between p-3 text-slate-950 font-black mb-4 select-none">
+          <div className="relative mx-auto w-28 h-36 bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 rounded-xl shadow-2xl border-2 border-amber-300/50 flex flex-col justify-between p-3 text-slate-950 font-black mb-4 select-none transform hover:scale-105 transition-transform">
             <span className="text-base text-left leading-none">{player.secret_number}</span>
             <span className="text-4xl text-center font-black my-auto">{player.secret_number}</span>
             <span className="text-base text-right leading-none">{player.secret_number}</span>
           </div>
 
-          {/* 2-Step Action */}
           {!player.has_played ? (
             <div className="space-y-3 pt-2 border-t border-slate-700/80">
               <form onSubmit={handleSave} className="space-y-2">
@@ -255,8 +267,8 @@
       );
     }
 
-    // --- Component: กระดานส่วนกลาง ---
-    function SharedPlayArea({ players, roomStatus, onRevealSingleCard }) {
+    // --- Component: กระดานส่วนกลาง (พร้อมปุ่มสลับตำแหน่งการ์ดที่ยังไม่เฉลย) ---
+    function SharedPlayArea({ players, onRevealSingleCard, onMoveCard }) {
       const playedCards = players
         .filter((p) => p.has_played && p.secret_number !== null)
         .sort((a, b) => a.order_index - b.order_index);
@@ -276,7 +288,7 @@
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              {playedCards.map((card) => {
+              {playedCards.map((card, idx) => {
                 const avatar = getAvatar(card.name);
                 return (
                   <div
@@ -290,7 +302,29 @@
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <span className="text-base">{avatar}</span>
-                        <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">{card.name}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">{card.name}</span>
+                          
+                          {/* ปุ่มเลื่อนตำแหน่ง ▲/▼ (เฉพาะการ์ดที่ยังไม่ถูกเฉลย) */}
+                          {!card.is_revealed && (
+                            <div className="flex gap-0.5 ml-1">
+                              <button
+                                onClick={() => onMoveCard(idx, idx - 1)}
+                                disabled={idx === 0}
+                                className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-20 text-[10px] rounded leading-none"
+                              >
+                                ◄
+                              </button>
+                              <button
+                                onClick={() => onMoveCard(idx, idx + 1)}
+                                disabled={idx === playedCards.length - 1}
+                                className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-20 text-[10px] rounded leading-none"
+                              >
+                                ►
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <p className="text-sm font-extrabold text-amber-300 my-1">"{card.clue}"</p>
                     </div>
@@ -428,7 +462,7 @@
         return () => { db.removeChannel(channel); };
       }, [roomId]);
 
-      // เริ่มเกม: แจกตัวเลขให้ผู้เล่นทุกคนในห้องพร้อมกัน
+      // เริ่มเกม: บันทึกนับจำนวนครั้งที่เล่นสะสม + แจกตัวเลข
       const handleStartGame = async () => {
         setGameAlert(null);
         const selectedTheme = customTheme.trim() || DEFAULT_THEMES[Math.floor(Math.random() * DEFAULT_THEMES.length)];
@@ -438,7 +472,19 @@
         const { data: latestPlayers } = await db.from('players').select('*').eq('room_id', roomId);
         if (!latestPlayers || latestPlayers.length === 0) return;
 
-        // บันทึกแจกตัวเลขให้ทุกคนในครั้งเดียว
+        // บันทึกสถิติจำนวนรอบที่เล่นเพิ่ม +1
+        try {
+          const { data: stats } = await db.from('game_stats').select('*').eq('id', 1).single();
+          if (stats) {
+            await db.from('game_stats').update({ total_games_played: stats.total_games_played + 1 }).eq('id', 1);
+          } else {
+            await db.from('game_stats').insert([{ id: 1, total_games_played: 1 }]);
+          }
+        } catch (e) {
+          console.log('Stats update error', e);
+        }
+
+        // แจกการ์ดตัวเลข
         const updatePromises = latestPlayers.map((p, i) =>
           db.from('players').update({
             secret_number: numbers[i],
@@ -487,6 +533,18 @@
         await db.from('players').update({ has_played: false, is_revealed: false }).eq('id', playerId);
       };
 
+      // สลับตำแหน่งการ์ดที่ยังไม่เฉลย
+      const handleMoveCard = async (fromIdx, toIdx) => {
+        const played = players.filter((p) => p.has_played && p.secret_number !== null).sort((a, b) => a.order_index - b.order_index);
+        const updated = [...played];
+        const [moved] = updated.splice(fromIdx, 1);
+        updated.splice(toIdx, 0, moved);
+
+        for (let i = 0; i < updated.length; i++) {
+          await db.from('players').update({ order_index: i }).eq('id', updated[i].id);
+        }
+      };
+
       const handleRevealSingleCard = async (targetCard) => {
         const revealedList = players.filter((p) => p.is_revealed).sort((a, b) => a.secret_number - b.secret_number);
         const lastMaxNumber = revealedList.length > 0 ? Math.max(...revealedList.map((p) => p.secret_number)) : 0;
@@ -511,8 +569,6 @@
       const currentPlayer = players.find((p) => p.id === playerId);
       const activePlayers = players.filter((p) => p.secret_number !== null);
       const playedCards = players.filter((p) => p.has_played && p.secret_number !== null);
-
-      // เป็นผู้ชมเฉพาะกรณีเพิ่งเข้าห้องมาหลังจากเกมเริ่มไปแล้วเท่านั้น
       const isSpectator = room?.status !== 'lobby' && (!currentPlayer || currentPlayer.secret_number === null);
 
       if (!room) return <div className="p-6 text-center text-white text-sm">กำลังเชื่อมต่อห้อง...</div>;
@@ -611,8 +667,8 @@
 
               <SharedPlayArea
                 players={players}
-                roomStatus={room.status}
                 onRevealSingleCard={handleRevealSingleCard}
+                onMoveCard={handleMoveCard}
               />
             </div>
           )}
